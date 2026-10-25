@@ -1,87 +1,138 @@
 import { Link } from 'react-router-dom';
+import { FiUpload, FiTable, FiBarChart2, FiDownload, FiCheck, FiCpu, FiShield, FiArrowRight } from 'react-icons/fi';
 
 export default function Guide() {
+  const steps = [
+    {
+      num: '01',
+      title: 'Ingest Your Dataset or Try a Sample',
+      desc: 'Drag & drop any CSV, TSV, TXT, or JSON file directly into the Dashboard. EdgeChart auto-detects column delimiters and parses quoted values with commas (RFC 4180). Alternatively, choose from 4 curated sample datasets to start exploring immediately.',
+      icon: FiUpload,
+    },
+    {
+      num: '02',
+      title: 'Review Dataset Health & Tabular Data',
+      desc: 'Instantly view total records, data types, and completion rates on the Dataset Summary bar. Use the interactive Data Explorer to search keywords, sort columns, and switch between compact and full multi-page views.',
+      icon: FiTable,
+    },
+    {
+      num: '03',
+      title: 'Select & Customize Visualizations',
+      desc: 'Toggle chart types in the visualization library: Bar, Line, Donut, Pie, Scatter, Distribution, Box Plot, Word Cloud, and Stats. Switch between 5 curated color palettes or click "Auto-Build Dashboard" for smart recommendations.',
+      icon: FiBarChart2,
+    },
+    {
+      num: '04',
+      title: 'Export & Share Results',
+      desc: 'Download high-resolution PNG images, generate PDF report sheets, or copy chart images directly to your clipboard to paste into Google Slides, PowerPoint, or Notion.',
+      icon: FiDownload,
+    },
+  ];
+
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">EdgeChart User Guide</h1>
-      <div className="prose max-w-none">
-        <p className="text-lg text-gray-700">
-          Welcome to EdgeChart! This guide will walk you through how to use our tool to visualise and analyse your data directly in your browser. No uploads, no servers—just fast, secure, and easy data exploration.
+    <div className="max-w-4xl mx-auto space-y-10 py-4">
+      {/* Header */}
+      <div className="pb-6 border-b border-slate-200">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-blue-700 bg-blue-50 border border-blue-200/60 rounded-full mb-3">
+          <FiShield className="w-3.5 h-3.5 text-blue-600" />
+          <span>Complete User Guide</span>
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+          How to Use EdgeChart
+        </h1>
+        <p className="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+          Learn how to visualize, explore, and export data in your browser with zero server transmission.
         </p>
+      </div>
 
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Getting Started</h2>
-        <p className="text-gray-700">
-          Follow these steps to transform your data into insightful visualisations:
-        </p>
-        <ol className="list-decimal pl-5 space-y-3 text-gray-700">
-          <li>
-            <strong>Upload Your Data:</strong> Go to the <Link to="/dashboard" className="text-blue-600 hover:underline">Dashboard</Link> and upload your data file. EdgeChart supports CSV, Excel (.xlsx, .xls), and JSON formats. Ensure your file has clear column headers for best results.
+      {/* 4 Steps */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {steps.map((step) => {
+          const Icon = step.icon;
+          return (
+            <div
+              key={step.num}
+              className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className="font-mono text-xs font-bold text-slate-400">
+                    STEP {step.num}
+                  </span>
+                </div>
+                <h3 className="text-base font-semibold text-slate-900">
+                  {step.title}
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {step.desc}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Deep Dives */}
+      <div className="space-y-6">
+        <h2 className="text-xl font-bold text-slate-900">
+          Advanced Capabilities
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <FiBarChart2 className="text-blue-600" />
+              <span>Statistical Distributions & Outliers</span>
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Use the <strong>Box Plot</strong> visualization to observe quartiles (Q1, Median, Q3) and statistical outliers (1.5× IQR). Enable <strong>Density Curve</strong> on the Distribution chart to render a Gaussian Kernel Density Estimate (KDE).
+            </p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <FiCpu className="text-indigo-600" />
+              <span>EdgeAgent Assistant</span>
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Visit <Link to="/agent" className="text-blue-600 hover:underline">EdgeAgent</Link> anytime to get instant statistical advice, chart recommendations, and troubleshooting tips processed 100% locally on your machine.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* File Format Standards */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 space-y-4">
+        <h3 className="text-base font-semibold text-slate-900">
+          File Format Best Practices
+        </h3>
+        <ul className="space-y-2 text-xs text-slate-600">
+          <li className="flex items-start gap-2">
+            <FiCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span><strong>Header Row:</strong> Ensure the first line contains clear, unique column names (e.g., &quot;Product, Price, Units Sold&quot;).</span>
           </li>
-          <li>
-            <strong>Preview Your Data:</strong> Once uploaded, EdgeChart displays the first five rows of your data in a table. Check for accuracy and ensure your data is formatted correctly (e.g., numbers in numeric columns, no mixed data types).
+          <li className="flex items-start gap-2">
+            <FiCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span><strong>Consistent Types:</strong> Keep numbers in numeric columns; currency symbols ($) and percentages (%) are automatically cleaned during analysis.</span>
           </li>
-          <li>
-            <strong>Create Visualisations:</strong> Use the Chart Builder to select your data columns and choose from various chart types (e.g., bar, line, scatter). Customise labels, colors, and more to make your chart shine.
+          <li className="flex items-start gap-2">
+            <FiCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span><strong>Supported Encodings:</strong> UTF-8 formatted CSV, TSV, or JSON array of objects.</span>
           </li>
-          <li>
-            <strong>Export Your Results:</strong> Save your charts as PNG or SVG images, or export your processed data as a CSV file for further use.
-          </li>
-        </ol>
-
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Supported File Formats</h2>
-        <p className="text-gray-700">
-          EdgeChart works with the following file types:
-        </p>
-        <ul className="list-disc pl-5 space-y-1 text-gray-700">
-          <li><strong>CSV:</strong> Comma-separated values with clear column headers (e.g., "Name,Age,Sales").</li>
-          <li><strong>Excel:</strong> .xlsx or .xls files with structured data in sheets.</li>
-          <li><strong>JSON:</strong> Array of objects with consistent keys (e.g., <code>[{'{'}"name": "Alice", "age": 30{'}'}, ...]</code>).</li>
-        </ul>
-        <p className="text-gray-700">
-          <strong>Tip:</strong> For best results, ensure your file has at least two columns and no more than 10,000 rows to maintain smooth performance.
-        </p>
-
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Statistical Analysis</h2>
-        <p className="text-gray-700">
-          EdgeChart automatically analyses your data to provide useful insights, including:
-        </p>
-        <ul className="list-disc pl-5 space-y-2 text-gray-700">
-          <li><strong>Numeric vs. Categorical Data:</strong> Identifies whether columns contain numbers (e.g., sales, temperature) or categories (e.g., regions, names) to suggest appropriate chart types.</li>
-          <li><strong>Missing Values:</strong> Flags any empty or invalid entries and provides options to handle them (e.g., ignore or fill with defaults).</li>
-          <li><strong>Basic Distributions and Outliers:</strong> Shows summaries like mean, median, and range for numeric data, and highlights potential outliers to help you spot anomalies.</li>
-        </ul>
-        <p className="text-gray-700">
-          These insights appear in the Chart Builder, helping you make informed decisions about which visualisations to create.
-        </p>
-
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Chart Customisation</h2>
-        <p className="text-gray-700">
-          EdgeChart’s Chart Builder lets you tailor your visualisations:
-        </p>
-        <ul className="list-disc pl-5 space-y-1 text-gray-700">
-          <li>Choose from multiple chart types (bar, line, pie, scatter, etc.).</li>
-          <li>Adjust colors, fonts, and labels to match your style.</li>
-          <li>Add titles and legends for clarity.</li>
-          <li>Zoom and pan on interactive charts for deeper exploration.</li>
         </ul>
 
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Troubleshooting</h2>
-        <p className="text-gray-700">
-          Encountering issues? Here are common fixes:
-        </p>
-        <ul className="list-disc pl-5 space-y-1 text-gray-700">
-          <li><strong>File Upload Errors:</strong> Ensure your file is in a supported format and under 10MB. Check for special characters in headers.</li>
-          <li><strong>Slow Performance:</strong> Large datasets may require a modern browser and sufficient device memory. Try reducing rows or columns.</li>
-          <li><strong>Chart Not Displaying:</strong> Verify that your data has at least one numeric column for charts like bar or line graphs.</li>
-        </ul>
-        <p className="text-gray-700">
-          Need more help? Visit our <Link to="/contact" className="text-blue-600 hover:underline">Contact</Link> page to reach out.
-        </p>
-
-        <h2 className="mt-6 text-2xl font-semibold text-gray-800">Ready to Explore?</h2>
-        <p className="text-gray-700">
-          Jump into EdgeChart now! Head to the <Link to="/dashboard" className="text-blue-600 hover:underline">Dashboard</Link> to upload your data and start creating stunning visualisations. Have feedback or suggestions? We’d love to hear from you on our <Link to="/contact" className="text-blue-600 hover:underline">Contact</Link> page.
-        </p>
+        <div className="pt-2">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-2xs"
+          >
+            <span>Open Dashboard</span>
+            <FiArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
     </div>
   );

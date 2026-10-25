@@ -1,0 +1,8 @@
+{
+  "name": "EdgeChart",
+  "description": "Interactive data visualization and statistical analysis tool for exploring datasets, generating charts, and exporting insights.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

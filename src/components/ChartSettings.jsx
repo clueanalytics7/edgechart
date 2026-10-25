@@ -1,5 +1,7 @@
 // ChartSettings.jsx
-export default function ChartSettings({ chartType, onConfigUpdate }) {
+import { useState } from 'react';
+
+export default function ChartSettings({ onConfigUpdate }) {
   const [showGrid, setShowGrid] = useState(true);
   
   return (

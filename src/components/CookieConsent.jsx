@@ -1,44 +1,49 @@
-import { useState, useEffect } from 'react';
-import { FiX, FiAlertCircle } from 'react-icons/fi';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { FiShield } from 'react-icons/fi';
 
 export default function CookieConsent() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!localStorage.getItem('cookieConsent')) {
-      setVisible(true);
+  const [visible, setVisible] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && !localStorage.getItem('cookieConsent');
+    } catch {
+      return false;
     }
-  }, []);
+  });
 
   const acceptCookies = () => {
-    localStorage.setItem('cookieConsent', 'true');
+    try {
+      localStorage.setItem('cookieConsent', 'true');
+    } catch {
+      // ignore
+    }
     setVisible(false);
-    // Initialize GA here if not already done in App.jsx
   };
 
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 z-50">
-      <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4">
-        <FiAlertCircle className="text-yellow-300 text-2xl flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm">
-            We use cookies to analyze traffic and improve your experience. 
-            By continuing, you agree to our use of cookies and Google Analytics.
-            <a href="/privacy" className="underline ml-2">Learn more</a>
+    <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xs text-white p-3.5 z-50 border-t border-slate-800 shadow-xl">
+      <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5 text-slate-300">
+          <FiShield className="text-emerald-400 w-4 h-4 shrink-0" />
+          <p>
+            EdgeChart processes all data locally on your device. We use anonymous traffic cookies to improve our tool.
+            <Link to="/privacy" className="underline text-white hover:text-blue-300 ml-1.5 font-medium">
+              Privacy details
+            </Link>
           </p>
         </div>
-        <div className="flex gap-2">
-          <button 
+        <div className="flex items-center gap-2 shrink-0">
+          <button
             onClick={() => setVisible(false)}
-            className="px-3 py-1 border border-gray-500 rounded text-sm"
+            className="px-3 py-1.5 border border-slate-700 hover:border-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors"
           >
             Decline
           </button>
-          <button 
+          <button
             onClick={acceptCookies}
-            className="px-3 py-1 bg-blue-600 rounded text-sm"
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors shadow-2xs"
           >
             Accept
           </button>

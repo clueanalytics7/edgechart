@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Bar, Line, Pie, Scatter } from 'react-chartjs-2';
+import { Bar, Line, Pie, Scatter, Doughnut } from 'react-chartjs-2';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 import SimpleWordCloud from './SimpleWordCloud';
@@ -19,11 +19,21 @@ import ChartJSZoomPlugin from 'chartjs-plugin-zoom';
 import { kernelDensityEstimation } from 'simple-statistics';
 import { BoxAndWhiskers } from 'chartjs-chart-box-and-violin-plot';
 import * as ss from 'simple-statistics';
+import {
+  FiDownload,
+  FiMaximize2,
+  FiMinimize2,
+  FiTrash2,
+  FiSliders,
+  FiLayout,
+  FiCheck,
+  FiZap,
+  FiCopy
+} from 'react-icons/fi';
 
 // Attempt to register BoxAndWhiskers with error handling
 let boxPlotRegistered = false;
 try {
-  console.log('Attempting to register Chart.js plugins...');
   ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -38,20 +48,52 @@ try {
     BoxAndWhiskers
   );
   boxPlotRegistered = true;
-  console.log('BoxAndWhiskers plugin registered successfully');
 } catch (err) {
-  console.error('Failed to register BoxAndWhiskers plugin:', err.message, err.stack);
+  console.warn('BoxAndWhiskers plugin registration notice:', err?.message || err);
 }
 
-const chartTypes = ['bar', 'line', 'pie', 'scatter', 'wordcloud', 'distribution', 'boxplot', 'stats'];
-const colorPalette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#34D399'];
-const highContrastPalette = ['#0000FF', '#FF0000', '#00FF00', '#FFFF00', '#FF00FF', '#00FFFF'];
+const chartTypes = [
+  'bar',
+  'line',
+  'doughnut',
+  'pie',
+  'scatter',
+  'distribution',
+  'boxplot',
+  'wordcloud',
+  'stats',
+];
+
+const THEMES = {
+  modern: {
+    name: 'Modern Tech',
+    colors: ['#3B82F6', '#6366F1', '#EC4899', '#10B981', '#F59E0B', '#8B5CF6', '#14B8A6'],
+  },
+  fintech: {
+    name: 'Fintech Emerald',
+    colors: ['#0D9488', '#0284C7', '#16A34A', '#D97706', '#6366F1', '#E11D48', '#059669'],
+  },
+  sunset: {
+    name: 'Sunset Warm',
+    colors: ['#F97316', '#EF4444', '#F59E0B', '#84CC16', '#06B6D4', '#8B5CF6', '#EC4899'],
+  },
+  slate: {
+    name: 'Minimal Slate',
+    colors: ['#334155', '#64748B', '#94A3B8', '#475569', '#0F172A', '#1E293B', '#52525B'],
+  },
+  highContrast: {
+    name: 'High Contrast',
+    colors: ['#0000FF', '#D97706', '#059669', '#DC2626', '#7C3AED', '#0891B2', '#000000'],
+  },
+};
 
 export default function ChartBuilder({ data }) {
   const [activeCharts, setActiveCharts] = useState([]);
+  const [currentTheme, setCurrentTheme] = useState('modern');
   const [chartConfigs, setChartConfigs] = useState({
     bar: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     line: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
+    doughnut: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     pie: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     scatter: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     wordcloud: { textColumn: '' },
@@ -64,119 +106,166 @@ export default function ChartBuilder({ data }) {
   const [numericColumns, setNumericColumns] = useState([]);
   const [textColumns, setTextColumns] = useState([]);
   const [layout, setLayout] = useState('grid');
-  const [highContrast, setHighContrast] = useState(false);
   const [dataLimit, setDataLimit] = useState(100);
   const [wordCloudLimit, setWordCloudLimit] = useState(100);
   const [minWordLength, setMinWordLength] = useState(2);
   const [binCount, setBinCount] = useState(10);
   const [showKDE, setShowKDE] = useState(false);
-  const [presets, setPresets] = useState([]);
-  const [error, setError] = useState(null);
   const [selectedWord, setSelectedWord] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null);
 
+  const activeColors = useMemo(() => {
+    return THEMES[currentTheme]?.colors || THEMES.modern.colors;
+  }, [currentTheme]);
+
+  // Analyze columns on data change
   useEffect(() => {
+    if (!data || data.length === 0) return;
+
     try {
-      if (data.length > 0) {
-        const allColumns = Object.keys(data[0]);
-        const numericCols = allColumns.filter(key => {
-          return data.some(row => typeof row[key] === 'number' || (!isNaN(parseFloat(row[key])) && isFinite(row[key])));
-        });
-        const textCols = allColumns.filter(key =>
-          typeof data[0][key] === 'string' && !numericCols.includes(key)
+      const allColumns = Object.keys(data[0]);
+      const numericCols = allColumns.filter((key) => {
+        return data.some(
+          (row) =>
+            typeof row[key] === 'number' ||
+            (!isNaN(parseFloat(row[key])) && isFinite(row[key]))
         );
+      });
+      const textCols = allColumns.filter(
+        (key) => typeof data[0][key] === 'string' && !numericCols.includes(key)
+      );
 
-        console.log('All columns:', allColumns);
-        console.log('Numeric columns:', numericCols);
-        console.log('Text columns:', textCols);
+      setColumns(allColumns);
+      setNumericColumns(numericCols);
+      setTextColumns(textCols);
 
-        setColumns(allColumns);
-        setNumericColumns(numericCols);
-        setTextColumns(textCols);
+      const defaultX = textCols[0] || allColumns[0] || '';
+      const defaultY = numericCols[0] || allColumns[1] || allColumns[0] || '';
+      const scatterX = numericCols[0] || allColumns[0] || '';
+      const scatterY = numericCols[1] || numericCols[0] || allColumns[0] || '';
 
-        setChartConfigs({
-          bar: {
-            xAxis: allColumns[0] || '',
-            yAxis: numericCols[0] || allColumns[0] || '',
-            xAxisLabel: allColumns[0] || '',
-            yAxisLabel: numericCols[0] || allColumns[0] || ''
-          },
-          line: {
-            xAxis: allColumns[0] || '',
-            yAxis: numericCols[0] || allColumns[0] || '',
-            xAxisLabel: allColumns[0] || '',
-            yAxisLabel: numericCols[0] || allColumns[0] || ''
-          },
-          pie: {
-            xAxis: allColumns[0] || '',
-            yAxis: numericCols[0] || allColumns[0] || '',
-            xAxisLabel: allColumns[0] || '',
-            yAxisLabel: numericCols[0] || allColumns[0] || ''
-          },
-          scatter: {
-            xAxis: numericCols[0] || allColumns[0] || '',
-            yAxis: numericCols[1] || numericCols[0] || allColumns[0] || '',
-            xAxisLabel: numericCols[0] || allColumns[0] || '',
-            yAxisLabel: numericCols[1] || numericCols[0] || allColumns[0] || ''
-          },
-          wordcloud: {
-            textColumn: textCols[0] || allColumns[0] || ''
-          },
-          distribution: {
-            column: numericCols[0] || allColumns[0] || ''
-          },
-          boxplot: {
-            column: numericCols[0] || allColumns[0] || ''
-          },
-          stats: {
-            column: allColumns[0] || ''
-          }
-        });
-      }
+      setChartConfigs({
+        bar: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
+        line: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
+        doughnut: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
+        pie: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
+        scatter: { xAxis: scatterX, yAxis: scatterY, xAxisLabel: scatterX, yAxisLabel: scatterY },
+        wordcloud: { textColumn: textCols[0] || allColumns[0] || '' },
+        distribution: { column: numericCols[0] || allColumns[0] || '' },
+        boxplot: { column: numericCols[0] || allColumns[0] || '' },
+        stats: { column: numericCols[0] || allColumns[0] || '' },
+      });
+
+      setActiveCharts((prev) => {
+        if (prev.length > 0) return prev;
+        if (textCols.length > 0 && numericCols.length > 0) {
+          return ['bar', 'doughnut', 'stats'];
+        } else if (numericCols.length >= 2) {
+          return ['scatter', 'bar', 'distribution'];
+        }
+        return ['bar', 'stats'];
+      });
     } catch (err) {
-      setError('Failed to process data. Please check your input file.');
-      console.error('Error in useEffect:', err);
+      console.error('Error initializing chart columns:', err);
     }
   }, [data]);
 
-  const chartDataMap = useMemo(() => {
-    const map = {};
-    activeCharts.forEach(type => {
-      try {
-        const config = chartConfigs[type];
+  const toggleChart = (type) => {
+    setActiveCharts((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
 
+  const autoRecommendDashboard = () => {
+    if (numericColumns.length >= 2 && textColumns.length >= 1) {
+      setActiveCharts(['bar', 'doughnut', 'scatter', 'stats']);
+    } else if (textColumns.length >= 1 && numericColumns.length >= 1) {
+      setActiveCharts(['bar', 'doughnut', 'stats']);
+    } else if (numericColumns.length >= 2) {
+      setActiveCharts(['scatter', 'distribution', 'boxplot', 'stats']);
+    } else {
+      setActiveCharts(['bar', 'stats']);
+    }
+  };
+
+  const downloadChart = async (id, format) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    try {
+      const dataUrl = await toPng(el, { quality: 0.95, backgroundColor: '#ffffff' });
+      if (format === 'png') {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `${id}-${Date.now()}.png`;
+        a.click();
+      } else if (format === 'pdf') {
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [el.offsetWidth, el.offsetHeight] });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, el.offsetWidth, el.offsetHeight);
+        pdf.save(`${id}-${Date.now()}.pdf`);
+      }
+    } catch (err) {
+      console.error('Error downloading chart:', err);
+    }
+  };
+
+  const copyChartImage = async (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    try {
+      const dataUrl = await toPng(el, { quality: 0.95, backgroundColor: '#ffffff' });
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setCopyFeedback(id);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy chart image:', err);
+    }
+  };
+
+  // Build chart dataset mappings
+  const chartDataMap = useMemo(() => {
+    if (!data || data.length === 0) return {};
+    const map = {};
+
+    activeCharts.forEach((type) => {
+      const config = chartConfigs[type];
+      if (!config) return;
+
+      try {
         switch (type) {
-          case 'wordcloud':
+          case 'wordcloud': {
             if (!config.textColumn) {
-              console.log('Wordcloud: No text column selected');
               map[type] = null;
               return;
             }
-            console.log('Wordcloud: Processing column', config.textColumn);
-            console.log('Wordcloud: Raw data sample', data.slice(0, 10).map(row => row[config.textColumn]));
             const textData = {};
-            data.slice(0, wordCloudLimit).forEach(row => {
+            data.slice(0, wordCloudLimit).forEach((row) => {
               const words = (row[config.textColumn] || '').toString().split(/\s+/);
-              words.forEach(word => {
+              words.forEach((word) => {
                 const cleanedWord = word.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
                 if (cleanedWord.length >= minWordLength) {
                   textData[cleanedWord] = (textData[cleanedWord] || 0) + 1;
                 }
               });
             });
-            const wordCloudData = Object.entries(textData)
+            map[type] = Object.entries(textData)
               .sort((a, b) => b[1] - a[1])
               .slice(0, 50)
               .map(([text, value]) => ({ text, value }));
-            console.log('Wordcloud: Generated data', wordCloudData);
-            map[type] = wordCloudData;
             break;
+          }
 
-          case 'distribution':
+          case 'distribution': {
             if (!config.column) {
               map[type] = null;
               return;
             }
-            const values = data.map(row => parseFloat(row[config.column])).filter(v => !isNaN(v));
+            const values = data
+              .map((row) => parseFloat(row[config.column]))
+              .filter((v) => !isNaN(v));
             if (values.length === 0) {
               map[type] = null;
               return;
@@ -184,356 +273,376 @@ export default function ChartBuilder({ data }) {
             const bins = {};
             const min = Math.min(...values);
             const max = Math.max(...values);
-            const step = (max - min) / binCount;
+            const step = (max - min) / (binCount || 10) || 1;
 
-            values.forEach(value => {
+            values.forEach((value) => {
               const bin = Math.floor((value - min) / step) * step + min;
-              bins[bin] = (bins[bin] || 0) + 1;
+              const roundedBin = Math.round(bin * 100) / 100;
+              bins[roundedBin] = (bins[roundedBin] || 0) + 1;
             });
 
-            const datasets = [{
-              label: `${config.column} Distribution`,
-              data: Object.values(bins),
-              backgroundColor: highContrast ? highContrastPalette[0] : colorPalette[0],
-              borderColor: highContrast ? highContrastPalette[0].replace('0.5', '1') : colorPalette[0].replace('0.5', '1'),
-              borderWidth: 1
-            }];
+            const datasets = [
+              {
+                label: `${config.column} Frequency`,
+                data: Object.values(bins),
+                backgroundColor: activeColors[0],
+                borderRadius: 4,
+              },
+            ];
 
             if (showKDE) {
               const kde = kernelDensityEstimation(values, 'gaussian', (max - min) / 100);
               datasets.push({
-                label: 'Density',
+                label: 'Density Curve',
                 data: kde.map(([x, y]) => ({ x, y: y * values.length * step })),
                 type: 'line',
-                borderColor: highContrast ? highContrastPalette[1] : colorPalette[1],
-                fill: false
+                borderColor: activeColors[1],
+                fill: false,
+                tension: 0.3,
               });
             }
 
             map[type] = {
-              labels: Object.keys(bins).map(Number).sort((a, b) => a - b),
-              datasets
+              labels: Object.keys(bins),
+              datasets,
             };
             break;
+          }
 
-          case 'boxplot':
+          case 'boxplot': {
             if (!config.column) {
-              console.log('Boxplot: No column selected');
               map[type] = null;
               return;
             }
-            if (!boxPlotRegistered) {
-              console.log('Boxplot: Plugin not registered');
-              map[type] = null;
-              return;
-            }
-            const boxplotValues = data.map(row => parseFloat(row[config.column])).filter(v => !isNaN(v));
-            console.log(`Boxplot: Selected column "${config.column}", valid values count: ${boxplotValues.length}`);
+            const boxplotValues = data
+              .map((row) => parseFloat(row[config.column]))
+              .filter((v) => !isNaN(v));
             if (boxplotValues.length < 5) {
-              console.log(`Boxplot: Insufficient valid data points (${boxplotValues.length}) for column "${config.column}"`);
               map[type] = null;
               return;
             }
             map[type] = {
               labels: [config.column],
-              datasets: [{
-                label: `Stats for ${config.column}`,
-                data: [{
-                  min: ss.min(boxplotValues),
-                  q1: ss.quantile(boxplotValues, 0.25),
-                  median: ss.median(boxplotValues),
-                  q3: ss.quantile(boxplotValues, 0.75),
-                  max: ss.max(boxplotValues),
-                }],
-                backgroundColor: highContrast ? highContrastPalette[4] : colorPalette[4],
-                borderColor: 'black',
-                borderWidth: 1,
-              }]
+              datasets: [
+                {
+                  label: `Distribution for ${config.column}`,
+                  data: [
+                    {
+                      min: ss.min(boxplotValues),
+                      q1: ss.quantile(boxplotValues, 0.25),
+                      median: ss.median(boxplotValues),
+                      q3: ss.quantile(boxplotValues, 0.75),
+                      max: ss.max(boxplotValues),
+                    },
+                  ],
+                  backgroundColor: activeColors[0] + '88',
+                  borderColor: activeColors[0],
+                  borderWidth: 1.5,
+                },
+              ],
             };
             break;
+          }
 
-          case 'stats':
+          case 'stats': {
             if (!config.column) {
               map[type] = null;
               return;
             }
-            const colData = data.map(row => row[config.column]);
-            const numericData = colData.map(val => parseFloat(val)).filter(v => !isNaN(v));
-            let stats = { 'Total Rows': colData.length };
-            
-            if (numericData.length > 0 && (numericData.length / colData.length > 0.5)) {
+            const colData = data.map((row) => row[config.column]);
+            const numericData = colData.map((val) => parseFloat(val)).filter((v) => !isNaN(v));
+            const stats = { 'Total Records': colData.length };
+
+            if (numericData.length > 0 && numericData.length / colData.length > 0.5) {
               Object.assign(stats, {
                 'Numeric Count': numericData.length,
-                'Mean': ss.mean(numericData).toFixed(3),
-                'Median': ss.median(numericData).toFixed(3),
-                'Std. Dev. (σ)': ss.standardDeviation(numericData).toFixed(3),
-                'Min': ss.min(numericData),
-                'Max': ss.max(numericData),
-                'Sum': ss.sum(numericData),
+                'Mean Average': ss.mean(numericData).toFixed(2),
+                'Median (50%)': ss.median(numericData).toFixed(2),
+                'Standard Deviation': ss.standardDeviation(numericData).toFixed(2),
+                'Minimum Value': ss.min(numericData),
+                'Maximum Value': ss.max(numericData),
+                'Range': (ss.max(numericData) - ss.min(numericData)).toFixed(2),
+                'Cumulative Sum': ss.sum(numericData).toLocaleString(),
               });
             } else {
-              const frequencies = ss.frequency(colData.map(String));
+              const frequencies = {};
+              colData.forEach((val) => {
+                const s = String(val ?? '');
+                frequencies[s] = (frequencies[s] || 0) + 1;
+              });
               const uniqueCount = Object.keys(frequencies).length;
               const topValue = Object.entries(frequencies).sort((a, b) => b[1] - a[1])[0];
               Object.assign(stats, {
-                'Unique Values': uniqueCount,
-                'Most Frequent': `"${topValue[0]}" (${topValue[1]} times)`,
+                'Unique Categories': uniqueCount,
+                'Top Frequent': topValue ? `"${topValue[0]}" (${topValue[1]} times)` : 'None',
               });
             }
             map[type] = stats;
             break;
+          }
 
-          default:
+          case 'pie':
+          case 'doughnut': {
             if (!config.xAxis || !config.yAxis) {
               map[type] = null;
               return;
             }
+            const sliced = data.slice(0, Math.min(dataLimit, 15));
             map[type] = {
-              labels: data.slice(0, dataLimit).map((row, index) => row[config.xAxis] || `Row ${index + 1}`),
+              labels: sliced.map((row, idx) => String(row[config.xAxis] || `Row ${idx + 1}`)),
               datasets: [
                 {
                   label: config.yAxisLabel || config.yAxis,
-                  data: data.slice(0, dataLimit).map(row => parseFloat(row[config.yAxis]) || 0),
-                  backgroundColor: type === 'pie' ? (highContrast ? highContrastPalette : colorPalette) : (highContrast ? highContrastPalette[0] : colorPalette[0]),
-                  borderColor: type === 'pie' ? (highContrast ? highContrastPalette : colorPalette).map(c => c.replace('0.5', '1')) : (highContrast ? highContrastPalette[0] : colorPalette[0]).replace('0.5', '1'),
+                  data: sliced.map((row) => parseFloat(row[config.yAxis]) || 0),
+                  backgroundColor: activeColors,
                   borderWidth: 1,
-                  customData: data.slice(0, dataLimit)
-                }
-              ]
+                  borderColor: '#ffffff',
+                },
+              ],
             };
             break;
+          }
+
+          case 'scatter': {
+            if (!config.xAxis || !config.yAxis) {
+              map[type] = null;
+              return;
+            }
+            const scatterPoints = data
+              .slice(0, dataLimit)
+              .map((row) => ({
+                x: parseFloat(row[config.xAxis]) || 0,
+                y: parseFloat(row[config.yAxis]) || 0,
+              }))
+              .filter((pt) => !isNaN(pt.x) && !isNaN(pt.y));
+
+            map[type] = {
+              datasets: [
+                {
+                  label: `${config.yAxis} vs. ${config.xAxis}`,
+                  data: scatterPoints,
+                  backgroundColor: activeColors[0],
+                  borderColor: activeColors[0],
+                  pointRadius: 5,
+                  pointHoverRadius: 7,
+                },
+              ],
+            };
+            break;
+          }
+
+          default: {
+            // bar, line
+            if (!config.xAxis || !config.yAxis) {
+              map[type] = null;
+              return;
+            }
+            const sliced = data.slice(0, dataLimit);
+            map[type] = {
+              labels: sliced.map((row, index) => String(row[config.xAxis] || `Row ${index + 1}`)),
+              datasets: [
+                {
+                  label: config.yAxisLabel || config.yAxis,
+                  data: sliced.map((row) => parseFloat(row[config.yAxis]) || 0),
+                  backgroundColor: type === 'line' ? activeColors[0] + '33' : activeColors[0],
+                  borderColor: activeColors[0],
+                  borderWidth: 2,
+                  fill: type === 'line',
+                  tension: 0.25,
+                  borderRadius: type === 'bar' ? 4 : 0,
+                },
+              ],
+            };
+            break;
+          }
         }
       } catch (err) {
-        console.error(`Error generating chart data for ${type}:`, err);
+        console.error(`Error calculating data for ${type}:`, err);
         map[type] = null;
       }
     });
+
     return map;
-  }, [activeCharts, chartConfigs, data, dataLimit, wordCloudLimit, minWordLength, binCount, showKDE, highContrast]);
-
-  if (error) {
-    return (
-      <div className="bg-red-50 rounded-lg p-8 text-center">
-        <p className="text-red-500">{error}</p>
-      </div>
-    );
-  }
-
-  if (data.length === 0) return null;
-
-  const downloadChart = (chartId, format = 'png') => {
-    const chartEl = document.getElementById(chartId);
-    if (chartEl) {
-      toPng(chartEl, { backgroundColor: '#ffffff', pixelRatio: 2 })
-        .then((dataUrl) => {
-          if (format === 'png') {
-            const link = document.createElement('a');
-            link.download = `${chartId}.png`;
-            link.href = dataUrl;
-            link.click();
-          } else if (format === 'pdf') {
-            const pdf = new jsPDF();
-            pdf.addImage(dataUrl, 'PNG', 10, 10, 190, 100);
-            pdf.save(`${chartId}.pdf`);
-          }
-        })
-        .catch(err => {
-          console.error('Error downloading chart:', err);
-        });
-    }
-  };
-
-  const toggleChart = (type) => {
-    if (activeCharts.includes(type)) {
-      setActiveCharts(activeCharts.filter(t => t !== type));
-    } else {
-      setActiveCharts([...activeCharts, type]);
-    }
-  };
-
-  const savePreset = () => {
-    setPresets([...presets, { name: `Preset ${presets.length + 1}`, config: chartConfigs }]);
-  };
-
-  const loadPreset = (preset) => {
-    setChartConfigs(preset.config);
-  };
+  }, [data, activeCharts, chartConfigs, activeColors, dataLimit, wordCloudLimit, minWordLength, binCount, showKDE]);
 
   const renderChartControls = (type) => {
     const config = chartConfigs[type];
-    const isSingleColumn = ['wordcloud', 'distribution', 'boxplot', 'stats'].includes(type);
-    
-    let availableColumns = columns;
-    if (type === 'wordcloud') availableColumns = textColumns;
-    if (['distribution', 'boxplot'].includes(type)) availableColumns = numericColumns;
+    if (!config) return null;
 
-    console.log(`Rendering ${type} controls, current column: ${config[isSingleColumn ? 'column' : 'xAxis']}`);
-
-    return (
-      <div className="space-y-2 mb-3">
-        <div className="flex gap-2 flex-wrap">
-          <div className="flex-1 min-w-[120px]">
-            <label className="text-sm font-medium text-gray-700">
-              {isSingleColumn ? 'Column' : 'X-Axis'}
-            </label>
+    if (['bar', 'line', 'pie', 'doughnut', 'scatter'].includes(type)) {
+      return (
+        <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-slate-50/80 rounded-lg text-xs border border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 font-medium">{type === 'scatter' ? 'X Axis:' : 'Category (X):'}</span>
             <select
-              value={config[isSingleColumn ? 'column' : 'xAxis']}
-              onChange={(e) => {
-                console.log(`Changing ${type} column to: ${e.target.value}`);
-                setChartConfigs(prev => {
-                  const newConfig = {
-                    ...prev,
-                    [type]: { ...prev[type], [isSingleColumn ? 'column' : 'xAxis']: e.target.value }
-                  };
-                  console.log(`Updated chartConfigs for ${type}:`, newConfig[type]);
-                  return newConfig;
-                });
-              }}
-              className="border rounded-md px-2 py-1 text-sm w-full"
+              value={config.xAxis}
+              onChange={(e) =>
+                setChartConfigs((prev) => ({
+                  ...prev,
+                  [type]: { ...prev[type], xAxis: e.target.value, xAxisLabel: e.target.value },
+                }))
+              }
+              className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500"
             >
-              {availableColumns.length > 0 ? (
-                availableColumns.map(col => (
-                  <option key={col} value={col}>{col}</option>
-                ))
-              ) : (
-                <option value="">No suitable columns available</option>
-              )}
+              {columns.map((col) => (
+                <option key={col} value={col}>
+                  {col}
+                </option>
+              ))}
             </select>
           </div>
-          {!isSingleColumn && type !== 'pie' && (
-            <div className="flex-1 min-w-[120px]">
-              <label className="text-sm font-medium text-gray-700">X-Axis Label</label>
-              <input
-                type="text"
-                value={config.xAxisLabel}
-                onChange={(e) => setChartConfigs(prev => ({ ...prev, [type]: { ...prev[type], xAxisLabel: e.target.value } }))}
-                className="border rounded-md px-2 py-1 text-sm w-full"
-              />
-            </div>
-          )}
-          {!isSingleColumn && type !== 'pie' && (
-            <>
-              <div className="flex-1 min-w-[120px]">
-                <label className="text-sm font-medium text-gray-700">Y-Axis</label>
-                <select
-                  value={config.yAxis}
-                  onChange={(e) => setChartConfigs(prev => ({ ...prev, [type]: { ...prev[type], yAxis: e.target.value } }))}
-                  className="border rounded-md px-2 py-1 text-sm w-full"
-                >
-                  {numericColumns.map(col => (
-                    <option key={col} value={col}>{col}</option>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 font-medium">Metric (Y):</span>
+            <select
+              value={config.yAxis}
+              onChange={(e) =>
+                setChartConfigs((prev) => ({
+                  ...prev,
+                  [type]: { ...prev[type], yAxis: e.target.value, yAxisLabel: e.target.value },
+                }))
+              }
+              className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500"
+            >
+              {numericColumns.length > 0
+                ? numericColumns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))
+                : columns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
                   ))}
+            </select>
+          </div>
+        </div>
+      );
+    }
+
+    if (['distribution', 'boxplot', 'stats'].includes(type)) {
+      return (
+        <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-slate-50/80 rounded-lg text-xs border border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 font-medium">Select Column:</span>
+            <select
+              value={config.column}
+              onChange={(e) =>
+                setChartConfigs((prev) => ({
+                  ...prev,
+                  [type]: { ...prev[type], column: e.target.value },
+                }))
+              }
+              className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500"
+            >
+              {(type === 'boxplot' && numericColumns.length > 0 ? numericColumns : columns).map((col) => (
+                <option key={col} value={col}>
+                  {col}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {type === 'distribution' && (
+            <div className="flex items-center gap-3 ml-2">
+              <label className="flex items-center gap-1 text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showKDE}
+                  onChange={(e) => setShowKDE(e.target.checked)}
+                  className="rounded text-blue-600"
+                />
+                <span>Density Curve</span>
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="text-slate-500">Bins:</span>
+                <select
+                  value={binCount}
+                  onChange={(e) => setBinCount(Number(e.target.value))}
+                  className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 text-xs"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
                 </select>
               </div>
-              <div className="flex-1 min-w-[120px]">
-                <label className="text-sm font-medium text-gray-700">Y-Axis Label</label>
-                <input
-                  type="text"
-                  value={config.yAxisLabel}
-                  onChange={(e) => setChartConfigs(prev => ({ ...prev, [type]: { ...prev[type], yAxisLabel: e.target.value } }))}
-                  className="border rounded-md px-2 py-1 text-sm w-full"
-                />
-              </div>
-            </>
-          )}
-          {type === 'wordcloud' && (
-            <>
-              <div className="flex-1 min-w-[120px]">
-                <label className="text-sm font-medium text-gray-700">Max Words</label>
-                <input
-                  type="number"
-                  value={wordCloudLimit}
-                  onChange={(e) => setWordCloudLimit(parseInt(e.target.value))}
-                  className="border rounded-md px-2 py-1 text-sm w-full"
-                  min="10"
-                  max="1000"
-                />
-              </div>
-              <div className="flex-1 min-w-[120px]">
-                <label className="text-sm font-medium text-gray-700">Min Word Length</label>
-                <input
-                  type="number"
-                  value={minWordLength}
-                  onChange={(e) => setMinWordLength(parseInt(e.target.value))}
-                  className="border rounded-md px-2 py-1 text-sm w-full"
-                  min="1"
-                  max="10"
-                />
-              </div>
-            </>
-          )}
-          {type === 'distribution' && (
-            <>
-              <div className="flex-1 min-w-[120px]">
-                <label className="text-sm font-medium text-gray-700">Number of Bins</label>
-                <input
-                  type="number"
-                  value={binCount}
-                  onChange={(e) => setBinCount(parseInt(e.target.value))}
-                  className="border rounded-md px-2 py-1 text-sm w-full"
-                  min="5"
-                  max="50"
-                />
-              </div>
-              <div className="flex-1 min-w-[120px] flex items-end">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={showKDE}
-                    onChange={(e) => setShowKDE(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Show KDE</span>
-                </label>
-              </div>
-            </>
-          )}
-          {!isSingleColumn && (
-            <div className="flex-1 min-w-[120px]">
-              <label className="text-sm font-medium text-gray-700">Data Limit</label>
-              <input
-                type="number"
-                value={dataLimit}
-                onChange={(e) => setDataLimit(parseInt(e.target.value))}
-                className="border rounded-md px-2 py-1 text-sm w-full"
-                min="10"
-                max="1000"
-              />
             </div>
           )}
         </div>
-      </div>
-    );
+      );
+    }
+
+    if (type === 'wordcloud') {
+      return (
+        <div className="flex flex-wrap items-center gap-3 mb-3 p-2 bg-slate-50/80 rounded-lg text-xs border border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 font-medium">Text Field:</span>
+            <select
+              value={config.textColumn}
+              onChange={(e) =>
+                setChartConfigs((prev) => ({
+                  ...prev,
+                  [type]: { ...prev[type], textColumn: e.target.value },
+                }))
+              }
+              className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500"
+            >
+              {(textColumns.length > 0 ? textColumns : columns).map((col) => (
+                <option key={col} value={col}>
+                  {col}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-slate-500">Words:</span>
+              <select
+                value={wordCloudLimit}
+                onChange={(e) => setWordCloudLimit(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 text-xs"
+              >
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-slate-500">Min Len:</span>
+              <select
+                value={minWordLength}
+                onChange={(e) => setMinWordLength(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 text-xs"
+              >
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   const renderChart = (type) => {
     const chartData = chartDataMap[type];
+    const isExpanded = expandedChart === type;
+
     if (!chartData) {
-      let errorMessage = `Invalid or missing data for ${type} chart. Please select valid columns.`;
-      if (type === 'boxplot') {
-        if (!chartConfigs[type].column) {
-          errorMessage = 'No column selected for boxplot. Please select a numeric column.';
-        } else if (!boxPlotRegistered) {
-          errorMessage = 'Boxplot chart is not supported due to a plugin error. Please try another chart type.';
-        } else if (data.map(row => parseFloat(row[chartConfigs[type].column])).filter(v => !isNaN(v)).length < 5) {
-          errorMessage = `Insufficient valid numeric data for column "${chartConfigs[type].column}" in boxplot. At least 5 numeric values are required.`;
-        }
-      } else if (type === 'wordcloud') {
-        if (!chartConfigs[type].textColumn) {
-          errorMessage = 'No text column selected for word cloud. Please select a text column.';
-        } else if (!textColumns.includes(chartConfigs[type].textColumn)) {
-          errorMessage = `Selected column "${chartConfigs[type].textColumn}" is not a valid text column.`;
-        }
-      }
-      console.log(`Rendering ${type} chart error: ${errorMessage}`);
       return (
         <div
           id={`chart-${type}`}
-          className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center text-red-600"
-          role="figure"
-          aria-label={`Invalid ${type} chart`}
+          className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500 shadow-xs"
         >
-          {errorMessage}
+          <div className="text-sm font-medium mb-1">Configuration Required</div>
+          <p className="text-xs text-slate-400">
+            Please pick a valid column in the controls above to render the {type} visualization.
+          </p>
         </div>
       );
     }
@@ -544,253 +653,296 @@ export default function ChartBuilder({ data }) {
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { family: 'Arial', size: 14 }, color: '#000' }
+          labels: {
+            boxWidth: 12,
+            font: { family: 'inherit', size: 12 },
+            color: '#475569',
+          },
         },
-        title: {
-          display: true,
-          text: chartConfigs[type].column
-            ? `${type.charAt(0).toUpperCase() + type.slice(1)} of ${chartConfigs[type].column}`
-            : `${chartConfigs[type].yAxisLabel || chartConfigs[type].yAxis} by ${chartConfigs[type].xAxisLabel || chartConfigs[type].xAxis}`,
-          font: { family: 'Arial', size: 16, weight: 'bold' },
-          color: '#000'
-        },
+        title: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleFont: { family: 'Arial', size: 12 },
-          bodyFont: { family: 'Arial', size: 12 },
-          callbacks: {
-            label: (context) => {
-              const row = context.dataset.customData?.[context.dataIndex];
-              const basicLabel = `${context.dataset.label || ''}: ${context.parsed.y || context.parsed}`;
-              if (!row) return basicLabel;
-              const details = Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(' | ');
-              return `${basicLabel} (${details})`;
-            }
-          }
+          backgroundColor: '#0F172A',
+          padding: 8,
+          cornerRadius: 6,
         },
-        zoom: ['line', 'scatter', 'distribution', 'boxplot'].includes(type) ? {
-          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
-          pan: { enabled: true, mode: 'xy' }
-        } : undefined
       },
-      scales: (type !== 'pie' && type !== 'wordcloud' && type !== 'stats') ? {
-        x: {
-          title: {
-            display: true,
-            text: chartConfigs[type].xAxisLabel || chartConfigs[type].xAxis || chartConfigs[type].column,
-            font: { family: 'Arial', size: 14 },
-            color: '#000'
-          },
-          ticks: { font: { family: 'Arial', size: 12 }, color: '#333' },
-          grid: { color: '#ddd' }
-        },
-        y: {
-          title: {
-            display: true,
-            text: chartConfigs[type].yAxisLabel || chartConfigs[type].yAxis,
-            font: { family: 'Arial', size: 14 },
-            color: '#000'
-          },
-          ticks: { font: { family: 'Arial', size: 12 }, color: '#333' },
-          grid: { color: '#ddd' }
-        }
-      } : {}
+      scales:
+        type !== 'pie' && type !== 'doughnut' && type !== 'wordcloud' && type !== 'stats'
+          ? {
+              x: {
+                grid: { color: '#F1F5F9' },
+                ticks: { font: { family: 'inherit', size: 11 }, color: '#64748B' },
+              },
+              y: {
+                grid: { color: '#F1F5F9' },
+                ticks: { font: { family: 'inherit', size: 11 }, color: '#64748B' },
+              },
+            }
+          : undefined,
     };
 
     if (type === 'stats') {
       return (
         <div
           id={`chart-${type}`}
-          className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200"
+          className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between"
         >
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold capitalize text-gray-900">Statistics Summary</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={() => downloadChart(`chart-${type}`, 'png')}
-                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-              >
-                Download
-              </button>
-              <button
-                onClick={() => toggleChart(type)}
-                className="px-2 py-1 text-xs bg-red-100 rounded hover:bg-red-200"
-              >
-                Remove
-              </button>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-slate-900 capitalize">
+                Statistics Summary
+              </h4>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => downloadChart(`chart-${type}`, 'png')}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100 transition-colors"
+                  title="Download PNG"
+                >
+                  <FiDownload className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => toggleChart(type)}
+                  className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors"
+                  title="Remove Chart"
+                >
+                  <FiTrash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
-          {renderChartControls(type)}
-          <div className="h-64 overflow-y-auto pt-2">
-            <h4 className="font-bold text-md mb-2 text-gray-800">{chartConfigs.stats.column}</h4>
-            <table className="w-full text-left text-sm">
-              <tbody>
-                {Object.entries(chartData).map(([key, value]) => (
-                  <tr key={key} className="border-b">
-                    <td className="py-2 font-medium text-gray-600">{key}</td>
-                    <td className="py-2 text-gray-900 font-mono">{value.toString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {renderChartControls(type)}
+            <div className="overflow-hidden border border-slate-100 rounded-lg">
+              <table className="min-w-full text-xs divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100">
+                  {Object.entries(chartData).map(([k, v]) => (
+                    <tr key={k} className="hover:bg-slate-50">
+                      <td className="px-3 py-1.5 font-medium text-slate-500">{k}</td>
+                      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-800 font-semibold">
+                        {v}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       );
     }
 
-    try {
-      return (
-        <div
-          id={`chart-${type}`}
-          className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200 ${expandedChart === type ? 'col-span-2 row-span-2' : ''}`}
-          role="figure"
-          aria-label={`${type} chart of selected data`}
-        >
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold capitalize text-gray-900">{type} Chart</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setExpandedChart(expandedChart === type ? null : type)}
-                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-              >
-                {expandedChart === type ? 'Collapse' : 'Expand'}
-              </button>
-              <select
-                onChange={(e) => downloadChart(`chart-${type}`, e.target.value)}
-                className="border rounded-md px-2 py-1 text-xs"
-              >
-                <option value="png">Download PNG</option>
-                <option value="pdf">Download PDF</option>
-              </select>
-              <button
-                onClick={() => toggleChart(type)}
-                className="px-2 py-1 text-xs bg-red-100 rounded hover:bg-red-200"
-              >
-                Remove
-              </button>
-            </div>
+    return (
+      <div
+        id={`chart-${type}`}
+        className={`bg-white p-4 rounded-xl border border-slate-200 shadow-xs transition-all ${
+          isExpanded ? 'col-span-1 md:col-span-2' : ''
+        }`}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-slate-900 capitalize">
+              {type === 'doughnut' ? 'Donut' : type} Chart
+            </h4>
+            <span className="text-xs text-slate-400 font-mono">
+              {chartConfigs[type]?.yAxis || chartConfigs[type]?.column || ''}
+            </span>
           </div>
-          {renderChartControls(type)}
-          <div className="h-64">
-            {type === 'bar' && <Bar data={chartData} options={options} />}
-            {type === 'line' && <Line data={chartData} options={options} />}
-            {type === 'pie' && <Pie data={chartData} options={options} />}
-            {type === 'scatter' && <Scatter data={chartData} options={options} />}
-            {type === 'distribution' && <Bar data={chartData} options={options} />}
-            {type === 'boxplot' && boxPlotRegistered && <Bar type="boxplot" data={chartData} options={options} />}
-            {type === 'wordcloud' && (
-              <SimpleWordCloud words={chartData} onWordClick={(word) => setSelectedWord(word.text)} />
-            )}
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => copyChartImage(`chart-${type}`)}
+              className="p-1.5 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100 transition-colors"
+              title="Copy chart image to clipboard"
+            >
+              {copyFeedback === `chart-${type}` ? (
+                <FiCheck className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <FiCopy className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              onClick={() => downloadChart(`chart-${type}`, 'png')}
+              className="p-1.5 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100 transition-colors"
+              title="Download PNG"
+            >
+              <FiDownload className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setExpandedChart(isExpanded ? null : type)}
+              className="p-1.5 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100 transition-colors"
+              title={isExpanded ? 'Collapse' : 'Expand full width'}
+            >
+              {isExpanded ? <FiMinimize2 className="w-3.5 h-3.5" /> : <FiMaximize2 className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={() => toggleChart(type)}
+              className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors"
+              title="Remove Chart"
+            >
+              <FiTrash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
-      );
-    } catch (err) {
-      console.error(`Error rendering chart ${type}:`, err);
-      return (
-        <div
-          id={`chart-${type}`}
-          className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center text-red-600"
-          role="figure"
-          aria-label={`Error in ${type} chart`}
-        >
-          Error rendering {type} chart. Please try different settings.
+
+        {renderChartControls(type)}
+
+        <div className={`${isExpanded ? 'h-80' : 'h-64'} pt-1`}>
+          {type === 'bar' && <Bar data={chartData} options={options} />}
+          {type === 'line' && <Line data={chartData} options={options} />}
+          {type === 'doughnut' && (
+            <Doughnut
+              data={chartData}
+              options={{ ...options, cutout: '65%' }}
+            />
+          )}
+          {type === 'pie' && <Pie data={chartData} options={options} />}
+          {type === 'scatter' && <Scatter data={chartData} options={options} />}
+          {type === 'distribution' && <Bar data={chartData} options={options} />}
+          {type === 'boxplot' && boxPlotRegistered && (
+            <Bar type="boxplot" data={chartData} options={options} />
+          )}
+          {type === 'wordcloud' && (
+            <SimpleWordCloud
+              words={chartData}
+              onWordClick={(word) => setSelectedWord(word.text)}
+            />
+          )}
         </div>
-      );
-    }
+      </div>
+    );
   };
 
   return (
     <div className="space-y-4">
-      {selectedWord && (
-        <div className="bg-blue-50 rounded-lg p-4 text-center">
-          <p className="text-blue-700">
-            Selected word: <strong>{selectedWord}</strong>
-          </p>
+      {/* Chart Library & Color Theme Toolbar */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Chart library chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+              <FiSliders className="w-3.5 h-3.5" />
+              <span>Visualizations:</span>
+            </span>
+            {chartTypes.map((type) => {
+              const isActive = activeCharts.includes(type);
+              return (
+                <button
+                  key={type}
+                  onClick={() => toggleChart(type)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-lg capitalize transition-colors ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {type === 'doughnut' ? 'Donut' : type}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick Auto-Recommend Button */}
           <button
-            onClick={() => setSelectedWord(null)}
-            className="mt-2 px-3 py-1 text-sm bg-blue-100 rounded hover:bg-blue-200"
+            onClick={autoRecommendDashboard}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg transition-colors shrink-0"
           >
-            Clear Selection
+            <FiZap className="w-3.5 h-3.5 text-blue-600" />
+            <span>Auto-Build Dashboard</span>
           </button>
         </div>
-      )}
-      <div className="p-4 bg-gray-50 rounded-lg border">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-gray-700 mr-2">Chart Library:</span>
-          {chartTypes.map(type => (
-            <div key={type} className="relative group">
-              <button
-                onClick={() => toggleChart(type)}
-                className={`px-3 py-1 rounded-md text-sm capitalize transition-colors ${
-                  activeCharts.includes(type) ? 'bg-blue-500 text-white shadow' : 'bg-gray-200 hover:bg-gray-300'
-                }`}
-              >
-                {type}
-              </button>
-              <span className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 -translate-x-1/2 z-10 w-max shadow-lg">
-                {type === 'bar'
-                  ? 'Compare values across categories'
-                  : type === 'line'
-                  ? 'Show trends over time'
-                  : type === 'pie'
-                  ? 'Display proportional data'
-                  : type === 'scatter'
-                  ? 'Visualize relationships between variables'
-                  : type === 'wordcloud'
-                  ? 'Show word frequency'
-                  : type === 'distribution'
-                  ? 'Show data distribution (histogram)'
-                  : type === 'boxplot'
-                  ? 'Visualize data quartiles & outliers'
-                  : type === 'stats'
-                  ? 'Show a descriptive statistics summary'
-                  : ''}
-              </span>
+
+        {/* Second row: Themes & Layout */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-medium">Theme Palette:</span>
+            <div className="flex items-center gap-1">
+              {Object.entries(THEMES).map(([key, theme]) => (
+                <button
+                  key={key}
+                  onClick={() => setCurrentTheme(key)}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-colors ${
+                    currentTheme === key
+                      ? 'border-blue-500 bg-blue-50/50 font-semibold text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex -space-x-1">
+                    {theme.colors.slice(0, 3).map((c, i) => (
+                      <span
+                        key={i}
+                        className="w-2.5 h-2.5 rounded-full ring-1 ring-white"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <span>{theme.name}</span>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
-          <span className="font-semibold text-gray-700 mr-2">Controls:</span>
-          <button
-            onClick={() => setLayout(layout === 'grid' ? 'single' : 'grid')}
-            className="px-3 py-1 rounded-md text-sm bg-gray-200 hover:bg-gray-300"
-          >
-            Toggle {layout === 'grid' ? 'Single Column' : 'Grid'} View
-          </button>
-          <button
-            onClick={() => setHighContrast(!highContrast)}
-            className="px-3 py-1 rounded-md text-sm bg-gray-200 hover:bg-gray-300"
-          >
-            Toggle High Contrast
-          </button>
-          <button
-            onClick={savePreset}
-            className="px-3 py-1 rounded-md text-sm bg-green-200 hover:bg-green-300"
-          >
-            Save Preset
-          </button>
-          {presets.map((preset, index) => (
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Rows:</span>
+              <select
+                value={dataLimit}
+                onChange={(e) => setDataLimit(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs"
+              >
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={500}>500 rows</option>
+              </select>
+            </div>
             <button
-              key={index}
-              onClick={() => loadPreset(preset)}
-              className="px-3 py-1 rounded-md text-sm bg-blue-200 hover:bg-blue-300"
+              onClick={() => setLayout(layout === 'grid' ? 'single' : 'grid')}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md transition-colors"
             >
-              Load {preset.name}
+              <FiLayout className="w-3.5 h-3.5" />
+              <span>{layout === 'grid' ? 'Grid View' : 'Single Column'}</span>
             </button>
-          ))}
+          </div>
         </div>
       </div>
 
+      {selectedWord && (
+        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800">
+          <span>
+            Selected keyword: <strong>{selectedWord}</strong>
+          </span>
+          <button
+            onClick={() => setSelectedWord(null)}
+            className="text-blue-600 hover:underline font-medium"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
+      {/* Render Active Charts Grid */}
       {activeCharts.length > 0 ? (
-        <div className={`gap-4 ${layout === 'grid' ? 'grid grid-cols-1 md:grid-cols-2' : 'space-y-4'}`}>
-          {activeCharts.map(type => (
+        <div
+          className={
+            layout === 'grid'
+              ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
+              : 'space-y-4'
+          }
+        >
+          {activeCharts.map((type) => (
             <div key={type}>{renderChart(type)}</div>
           ))}
         </div>
       ) : (
-        <div className="bg-gray-50 rounded-lg p-12 text-center border-2 border-dashed">
-          <h3 className="text-xl font-semibold text-gray-700">Your Dashboard is Empty</h3>
-          <p className="text-gray-500 mt-2">Add a chart from the library above to begin your analysis.</p>
+        <div className="bg-white rounded-xl p-10 text-center border border-slate-200 shadow-2xs">
+          <h3 className="text-base font-semibold text-slate-800">No Visualizations Active</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            Click on any chart type in the toolbar above, or click &ldquo;Auto-Build Dashboard&rdquo; to instantly generate charts from your columns.
+          </p>
+          <button
+            onClick={autoRecommendDashboard}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-2xs"
+          >
+            Auto-Build Dashboard
+          </button>
         </div>
       )}
     </div>

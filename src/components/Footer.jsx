@@ -79,7 +79,7 @@ export default function Footer() {
           </div>
         </div> 
           <div className="mt-8 pt-8 border-t border-gray-200 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} <a href="https://clue-analytics.web.app/" target="_blank" rel="noopener noreferrer" class="text-gray-200 hover:text-blue-400 transition-colors">ClueAnalytics</a> - EdgeChart. All rights reserved. 
+          © {new Date().getFullYear()} <a href="https://clue-analytics.web.app/" target="_blank" rel="noopener noreferrer" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">ClueAnalytics</a> - EdgeChart. All rights reserved. 
         </div>
       </div>
     </footer>

@@ -1,5 +1,5 @@
 export default function SimpleWordCloud({ words, onWordClick }) {
-  const maxValue = Math.max(...words.map(w => w.value));
+  const _maxValue = Math.max(...words.map(w => w.value));
   const minValue = Math.min(...words.map(w => w.value));
 
   return (
