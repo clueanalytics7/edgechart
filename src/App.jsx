@@ -134,8 +134,10 @@ export default function App() {
     setError(null);
   };
 
+  const basename = typeof window !== 'undefined' && window.location.pathname.startsWith('/edgechart') ? '/edgechart' : '/';
+
   return (
-    <Router>
+    <Router basename={basename}>
       <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900">
         <Navbar />
         <CookieConsent />
