@@ -28,7 +28,9 @@ import {
   FiLayout,
   FiCheck,
   FiZap,
-  FiCopy
+  FiCopy,
+  FiTv,
+  FiX
 } from 'react-icons/fi';
 
 // Attempt to register BoxAndWhiskers with error handling
@@ -91,8 +93,8 @@ export default function ChartBuilder({ data }) {
   const [activeCharts, setActiveCharts] = useState([]);
   const [currentTheme, setCurrentTheme] = useState('modern');
   const [chartConfigs, setChartConfigs] = useState({
-    bar: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
-    line: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
+    bar: { xAxis: '', yAxis: '', yAxis2: '', xAxisLabel: '', yAxisLabel: '' },
+    line: { xAxis: '', yAxis: '', yAxis2: '', xAxisLabel: '', yAxisLabel: '' },
     doughnut: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     pie: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
     scatter: { xAxis: '', yAxis: '', xAxisLabel: '', yAxisLabel: '' },
@@ -102,6 +104,7 @@ export default function ChartBuilder({ data }) {
     stats: { column: '' },
   });
   const [expandedChart, setExpandedChart] = useState(null);
+  const [isPresentation, setIsPresentation] = useState(false);
   const [columns, setColumns] = useState([]);
   const [numericColumns, setNumericColumns] = useState([]);
   const [textColumns, setTextColumns] = useState([]);
@@ -145,8 +148,8 @@ export default function ChartBuilder({ data }) {
       const scatterY = numericCols[1] || numericCols[0] || allColumns[0] || '';
 
       setChartConfigs({
-        bar: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
-        line: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
+        bar: { xAxis: defaultX, yAxis: defaultY, yAxis2: '', xAxisLabel: defaultX, yAxisLabel: defaultY },
+        line: { xAxis: defaultX, yAxis: defaultY, yAxis2: '', xAxisLabel: defaultX, yAxisLabel: defaultY },
         doughnut: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
         pie: { xAxis: defaultX, yAxis: defaultY, xAxisLabel: defaultX, yAxisLabel: defaultY },
         scatter: { xAxis: scatterX, yAxis: scatterY, xAxisLabel: scatterX, yAxisLabel: scatterY },
@@ -169,6 +172,16 @@ export default function ChartBuilder({ data }) {
       console.error('Error initializing chart columns:', err);
     }
   }, [data]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isPresentation) {
+        setIsPresentation(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPresentation]);
 
   const toggleChart = (type) => {
     setActiveCharts((prev) =>
@@ -438,20 +451,35 @@ export default function ChartBuilder({ data }) {
               return;
             }
             const sliced = data.slice(0, dataLimit);
+            const datasets = [
+              {
+                label: config.yAxisLabel || config.yAxis,
+                data: sliced.map((row) => parseFloat(row[config.yAxis]) || 0),
+                backgroundColor: type === 'line' ? activeColors[0] + '33' : activeColors[0],
+                borderColor: activeColors[0],
+                borderWidth: 2,
+                fill: type === 'line',
+                tension: 0.25,
+                borderRadius: type === 'bar' ? 4 : 0,
+              },
+            ];
+
+            if (config.yAxis2) {
+              datasets.push({
+                label: config.yAxis2,
+                data: sliced.map((row) => parseFloat(row[config.yAxis2]) || 0),
+                backgroundColor: type === 'line' ? (activeColors[1] || '#10B981') + '33' : (activeColors[1] || '#10B981'),
+                borderColor: activeColors[1] || '#10B981',
+                borderWidth: 2,
+                fill: type === 'line',
+                tension: 0.25,
+                borderRadius: type === 'bar' ? 4 : 0,
+              });
+            }
+
             map[type] = {
               labels: sliced.map((row, index) => String(row[config.xAxis] || `Row ${index + 1}`)),
-              datasets: [
-                {
-                  label: config.yAxisLabel || config.yAxis,
-                  data: sliced.map((row) => parseFloat(row[config.yAxis]) || 0),
-                  backgroundColor: type === 'line' ? activeColors[0] + '33' : activeColors[0],
-                  borderColor: activeColors[0],
-                  borderWidth: 2,
-                  fill: type === 'line',
-                  tension: 0.25,
-                  borderRadius: type === 'bar' ? 4 : 0,
-                },
-              ],
+              datasets,
             };
             break;
           }
@@ -517,6 +545,31 @@ export default function ChartBuilder({ data }) {
                   ))}
             </select>
           </div>
+
+          {(type === 'bar' || type === 'line') && numericColumns.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Compare (Y2):</span>
+              <select
+                value={config.yAxis2 || ''}
+                onChange={(e) =>
+                  setChartConfigs((prev) => ({
+                    ...prev,
+                    [type]: { ...prev[type], yAxis2: e.target.value },
+                  }))
+                }
+                className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">None (Single Metric)</option>
+                {numericColumns
+                  .filter((col) => col !== config.yAxis)
+                  .map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
       );
     }
@@ -900,6 +953,14 @@ export default function ChartBuilder({ data }) {
               <FiLayout className="w-3.5 h-3.5" />
               <span>{layout === 'grid' ? 'Grid View' : 'Single Column'}</span>
             </button>
+            <button
+              onClick={() => setIsPresentation(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-700 hover:text-blue-600 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors font-medium shadow-2xs"
+              title="Fullscreen presentation mode (Esc to exit)"
+            >
+              <FiTv className="w-3.5 h-3.5 text-blue-600" />
+              <span>Present</span>
+            </button>
           </div>
         </div>
       </div>
@@ -943,6 +1004,45 @@ export default function ChartBuilder({ data }) {
           >
             Auto-Build Dashboard
           </button>
+        </div>
+      )}
+
+      {/* Fullscreen Presentation Mode */}
+      {isPresentation && (
+        <div className="fixed inset-0 z-50 bg-slate-900/98 backdrop-blur-md overflow-y-auto p-6 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+              <h2 className="text-sm font-bold text-white tracking-tight">
+                EdgeChart Presentation View
+              </h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-2xs text-slate-400 hidden sm:inline">Press ESC or</span>
+              <button
+                onClick={() => setIsPresentation(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors shadow-xs"
+              >
+                <FiX className="w-3.5 h-3.5" />
+                <span>Exit Presentation</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="py-6 flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {activeCharts.map((type) => (
+                <div key={type} className="rounded-xl overflow-hidden shadow-2xl">
+                  {renderChart(type)}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-2xs text-slate-500">
+            <span>Client-side Presentation Canvas · Zero Cloud Transmission</span>
+            <span>EdgeChart Analytics</span>
+          </div>
         </div>
       )}
     </div>

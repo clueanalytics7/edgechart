@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { FiAlertTriangle } from "react-icons/fi";
 import Navbar from "./components/Navbar";
@@ -10,6 +10,9 @@ import SupportBanner from "./components/SupportBanner";
 import ExportData from "./components/ExportData";
 import DatasetSummary from "./components/DatasetSummary";
 import DatasetInsights from "./components/DatasetInsights";
+import DatasetFilterBar from "./components/DatasetFilterBar";
+import DataPrepTools from "./components/DataPrepTools";
+import WorkspaceManager from "./components/WorkspaceManager";
 import Footer from './components/Footer';
 import Home from "./pages/Home";
 import Guide from "./pages/Guide";
@@ -19,17 +22,41 @@ import Agent from "./pages/Agent";
 import Privacy from './pages/Privacy';
 import { initGA, logPageView } from "./lib/analytics";
 
-function DataAnalysisPage({ tableData, datasetName, isLoading, error, handleDataLoaded, handleResetData }) {
+function DataAnalysisPage({
+  tableData,
+  datasetName,
+  isLoading,
+  error,
+  handleDataLoaded,
+  handleResetData,
+  handleDataUpdated,
+  handleResetOriginal
+}) {
+  const [filterPredicate, setFilterPredicate] = useState(null);
+
+  // Compute reactive slice of data based on active filters
+  const displayData = useMemo(() => {
+    if (!filterPredicate || !tableData) return tableData;
+    return tableData.filter(filterPredicate);
+  }, [tableData, filterPredicate]);
+
   if (tableData.length === 0) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
-            Analytics Workspace
-          </h1>
-          <p className="text-xs text-slate-500">
-            Upload your CSV, TSV, or JSON dataset — or pick a curated sample to explore visualizations instantly.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
+              Analytics Workspace
+            </h1>
+            <p className="text-xs text-slate-500">
+              Upload your CSV, TSV, or JSON dataset — or pick a curated sample to explore visualizations instantly.
+            </p>
+          </div>
+          <WorkspaceManager
+            currentData={tableData}
+            datasetName={datasetName}
+            onLoadWorkspace={handleDataLoaded}
+          />
         </div>
 
         {error && (
@@ -45,16 +72,43 @@ function DataAnalysisPage({ tableData, datasetName, isLoading, error, handleData
   }
 
   return (
-    <div className="space-y-5">
-      {/* Dataset Summary & Metrics Bar */}
+    <div className="space-y-4">
+      {/* Workspace toolbar & Dataset Summary */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Workspace:</span>
+          <span className="text-xs font-semibold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-slate-200">
+            {datasetName || 'Active Session'}
+          </span>
+        </div>
+        <WorkspaceManager
+          currentData={tableData}
+          datasetName={datasetName}
+          onLoadWorkspace={handleDataLoaded}
+        />
+      </div>
+
       <DatasetSummary 
-        data={tableData} 
+        data={displayData} 
         datasetName={datasetName} 
         onReset={handleResetData}
       />
 
       {/* Automated Edge Insights */}
-      <DatasetInsights data={tableData} />
+      <DatasetInsights data={displayData} />
+
+      {/* Interactive Slicer / Filter Bar */}
+      <DatasetFilterBar
+        rawData={tableData}
+        onFilterChange={setFilterPredicate}
+      />
+
+      {/* 1-Click Data Cleaning & Prep Tools */}
+      <DataPrepTools
+        data={tableData}
+        onDataUpdated={handleDataUpdated}
+        onResetOriginal={handleResetOriginal}
+      />
 
       {isLoading && (
         <div className="flex items-center justify-center p-8 bg-white rounded-xl border border-slate-200">
@@ -70,9 +124,9 @@ function DataAnalysisPage({ tableData, datasetName, isLoading, error, handleData
         </div>
       )}
 
-      {/* Chart Builder Section */}
+      {/* Chart Builder Section with Multi-Metric & Presentation Support */}
       <div className="space-y-2">
-        <ChartBuilder data={tableData} />
+        <ChartBuilder data={displayData} />
       </div>
 
       {/* Full Data Explorer Table */}
@@ -83,13 +137,13 @@ function DataAnalysisPage({ tableData, datasetName, isLoading, error, handleData
               Data Explorer
             </h3>
             <p className="text-xs text-slate-500">
-              Search, sort, and inspect tabular values client-side
+              Search, sort, and inspect tabular records client-side ({displayData.length} records active)
             </p>
           </div>
-          <ExportData data={tableData} />
+          <ExportData data={displayData} />
         </div>
 
-        <DataTable data={tableData} initialLimit={5} />
+        <DataTable data={displayData} initialLimit={5} />
       </div>
     </div>
   );
@@ -97,6 +151,7 @@ function DataAnalysisPage({ tableData, datasetName, isLoading, error, handleData
 
 export default function App() {
   const [tableData, setTableData] = useState([]);
+  const [originalData, setOriginalData] = useState([]);
   const [datasetName, setDatasetName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -118,6 +173,7 @@ export default function App() {
           setError("The file needs at least 2 columns to perform visualization and analysis.");
         } else {
           setTableData(data);
+          setOriginalData(data);
           setDatasetName(sourceName);
         }
         setIsLoading(false);
@@ -128,8 +184,19 @@ export default function App() {
     }
   };
 
+  const handleDataUpdated = (cleanedData) => {
+    setTableData(cleanedData);
+  };
+
+  const handleResetOriginal = () => {
+    if (originalData && originalData.length > 0) {
+      setTableData(originalData);
+    }
+  };
+
   const handleResetData = () => {
     setTableData([]);
+    setOriginalData([]);
     setDatasetName('');
     setError(null);
   };
@@ -155,6 +222,8 @@ export default function App() {
                   error={error}
                   handleDataLoaded={handleDataLoaded}
                   handleResetData={handleResetData}
+                  handleDataUpdated={handleDataUpdated}
+                  handleResetOriginal={handleResetOriginal}
                 />
               } 
             />
